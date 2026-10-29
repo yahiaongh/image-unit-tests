@@ -1,0 +1,35 @@
+meta:
+  base_url: "TODO"
+  api_key_env: "META_API_KEY"
+
+basten:
+  base_url: "https://inference.baseten.co/v1"
+  api_key_env: "BASETEN_API_KEY"
+
+models:
+  spark:
+    model_id: "meta-models/muse-spark-open-1026"
+    endpoint: "TODO"
+    temperature: 0.0
+  image:
+    model_id: "TODO: muse-image-xxx"
+    endpoint: "TODO"
+    edit_endpoint: "TODO"
+  sam:
+    model_id: "TODO: sam-3.1"
+    endpoint: "TODO"
+
+agent:
+  max_rounds: 4
+  iou_threshold: 0.5
+  min_mask_area_ratio: 0.0001
+  position_tolerance: 0.10
+
+eval:
+  default_max_cost_usd: 2.00
+  cost_per_image_usd: 0.01
+  cost_per_sam_call_usd: 0.0025
+
+mock:
+  enabled: false
+  force_fail_first_round: false
