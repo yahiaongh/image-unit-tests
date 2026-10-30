@@ -6,3 +6,4 @@ PyYAML>=6.0
 requests>=2.31
 pytest>=8.0
 gradio>=4.0
+meta-sam-parser==0.1.0

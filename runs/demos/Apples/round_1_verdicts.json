@@ -1,0 +1,17 @@
+[
+  {
+    "constraint_id": "count_green_apples",
+    "passed": false,
+    "reason": "Expected 8 objects but found 9."
+  },
+  {
+    "constraint_id": "presence_bowl",
+    "passed": true,
+    "reason": "At least one object is present."
+  },
+  {
+    "constraint_id": "absence_other_fruit",
+    "passed": true,
+    "reason": "No matching objects were detected."
+  }
+]

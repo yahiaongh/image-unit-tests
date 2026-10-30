@@ -99,6 +99,11 @@ def render_round_overlay(
                     prompt_status[prompt] = status
 
         overlay = Image.new("RGBA", source.size, (0, 0, 0, 0))
+        try:
+            mask_number_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 40)
+        except OSError:
+            mask_number_font = ImageFont.load_default(size=40)
+        mask_centers = []
         if not isinstance(masks_by_prompt, dict):
             masks_by_prompt = {}
         for prompt, status in prompt_status.items():
@@ -125,8 +130,27 @@ def render_round_overlay(
                 )
                 outline_color = Image.new("RGBA", source.size, (*color, 255))
                 overlay.paste(outline_color, (0, 0), outline)
+                if mask_array.any():
+                    ys, xs = np.where(mask_array)
+                    mask_centers.append(
+                        (
+                            int(round(float(xs.mean()))),
+                            int(round(float(ys.mean()))),
+                        )
+                    )
 
         rendered = Image.alpha_composite(source.convert("RGBA"), overlay).convert("RGB")
+        number_draw = ImageDraw.Draw(rendered)
+        for mask_number, center in enumerate(mask_centers, start=1):
+            number_draw.text(
+                center,
+                str(mask_number),
+                font=mask_number_font,
+                fill="white",
+                stroke_width=4,
+                stroke_fill="black",
+                anchor="mm",
+            )
         return rendered, caption_text
     except Exception:
         LOGGER.error("Failed to render round %s overlay:\n%s", round_index, traceback.format_exc())
@@ -407,11 +431,44 @@ def _four_outputs(checklist, gallery_items, summary, technical):
     return checklist, gallery_items, f'<div style="font-size:1.25em;text-align:center">{summary}</div>', technical
 
 
-def replay_demo() -> tuple[str, list[tuple[Image.Image, str]], str, str]:
-    demo_dir = Path("runs") / "demo"
+def _gallery_layout_outputs(outputs):
+    checklist, gallery_items, summary, technical = outputs
+    columns = 1 if len(gallery_items) == 1 else 2
+    return (
+        checklist,
+        gr.update(value=gallery_items, columns=columns),
+        summary,
+        technical,
+    )
+
+
+def _available_demos() -> list[str]:
+    demos_dir = Path("runs") / "demos"
+    if not demos_dir.is_dir():
+        return []
+    return sorted(path.name for path in demos_dir.iterdir() if path.is_dir())
+
+
+def _demo_choices_update(mode: str):
+    choices = _available_demos()
+    return gr.update(
+        choices=choices,
+        value="Apples" if "Apples" in choices else (choices[0] if choices else None),
+        visible=mode.startswith("Demo replay"),
+    )
+
+
+def replay_demo(selected_demo: str | None) -> tuple[str, list[tuple[Image.Image, str]], str, str]:
+    if not selected_demo:
+        return _four_outputs("", [], "Select a saved demo scenario to replay.", "")
+    if Path(selected_demo).name != selected_demo:
+        return _four_outputs("", [], "The selected demo scenario is invalid.", "")
+    demo_dir = Path("runs") / "demos" / selected_demo
+    if not demo_dir.is_dir():
+        return _four_outputs("", [], f"Demo scenario '{selected_demo}' was not found.", "")
     summary_path = demo_dir / "summary.json"
     if not summary_path.exists():
-        return _four_outputs("", [], "No saved demo. Run one brief first, then copy its run folder to runs/demo.", "")
+        return _four_outputs("", [], f"Demo scenario '{selected_demo}' has no saved summary.", "")
     try:
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
         constraints_data = summary.get("constraints", [])
@@ -422,7 +479,26 @@ def replay_demo() -> tuple[str, list[tuple[Image.Image, str]], str, str]:
             masks_path = demo_dir / f"round_{round_index}_masks.json"
             verdicts_path = demo_dir / f"round_{round_index}_verdicts.json"
             fix_path = demo_dir / f"round_{round_index}_fix.txt"
-            masks = json.loads(masks_path.read_text(encoding="utf-8")) if masks_path.exists() else {}
+            saved_masks = (
+                json.loads(masks_path.read_text(encoding="utf-8"))
+                if masks_path.exists()
+                else []
+            )
+            masks = {}
+            if isinstance(saved_masks, list):
+                for saved_mask in saved_masks:
+                    prompt = saved_mask.get("prompt")
+                    relative_path = saved_mask.get("mask_path")
+                    if not prompt or not relative_path:
+                        continue
+                    mask_path = demo_dir / relative_path
+                    if mask_path.is_file():
+                        masks.setdefault(prompt, []).append({
+                            **saved_mask,
+                            "path": mask_path,
+                        })
+            elif isinstance(saved_masks, dict):
+                masks = saved_masks
             verdicts = json.loads(verdicts_path.read_text(encoding="utf-8")) if verdicts_path.exists() else []
             round_data.append({
                 "round": round_index,
@@ -447,11 +523,12 @@ def replay_demo() -> tuple[str, list[tuple[Image.Image, str]], str, str]:
 def run_brief(
     brief: str,
     mode: str,
+    selected_demo: str | None = None,
 ) -> tuple[str, list[tuple[Image.Image, str]], str, str]:
+    if mode.startswith("Demo replay"):
+        return replay_demo(selected_demo)
     if not brief or not brief.strip():
         return _four_outputs("", [], "Please enter a brief first.", "")
-    if mode.startswith("Demo replay"):
-        return replay_demo()
     try:
         config = load_config()
         if mode.startswith("Live"):
@@ -500,19 +577,6 @@ def ConstraintAdapter(data: dict):
 
 APP_CSS = f"""
     .hero-subtitle {{ color: {GREY}; font-size: 0.95em; }}
-    .round-timeline {{ min-height: 360px; }}
-    .round-timeline .grid-wrap {{
-        display: flex !important;
-        flex-wrap: nowrap !important;
-        gap: 12px;
-        overflow-x: auto !important;
-        padding-bottom: 12px;
-    }}
-    .round-timeline .grid-wrap > * {{
-        flex: 0 0 280px !important;
-        width: 280px !important;
-        max-width: 280px !important;
-    }}
 """
 
 with gr.Blocks() as app:
@@ -521,18 +585,26 @@ with gr.Blocks() as app:
         f'<div class="hero-subtitle">An AI draws an image, then checks its own work '
         f"against a checklist and fixes what's wrong.</div>"
     )
+    brief = gr.Textbox(
+        label="What should the image show?",
+        placeholder="e.g. exactly 5 red chairs in a row on a beach, and a dog on the far left",
+        lines=1,
+    )
     with gr.Row():
-        brief = gr.Textbox(
-            label="What should the image show?",
-            placeholder="e.g. exactly 3 red chairs on a beach",
-            scale=5,
-            lines=1,
-        )
         mode = gr.Dropdown(
             list(MODES),
             label="How to run it",
-            value=MODES[0],
-            scale=2,
+            value=MODES[2],
+        )
+        demo_selector = gr.Dropdown(
+            choices=_available_demos(),
+            value=(
+                "Apples"
+                if "Apples" in _available_demos()
+                else next(iter(_available_demos()), None)
+            ),
+            label="Demo scenario",
+            visible=True,
         )
         run_btn = gr.Button("Run", variant="primary")
         replay_btn = gr.Button("Replay saved demo")
@@ -541,18 +613,31 @@ with gr.Blocks() as app:
     gr.Markdown("## What happened, round by round")
     timeline_gallery = gr.Gallery(
         label="Rounds",
-        columns=3,
-        height=540,
+        columns=2,
         object_fit="contain",
-        elem_classes=["round-timeline"],
     )
     summary_panel = gr.Markdown()
     with gr.Accordion("Technical details (for developers)", open=False):
         technical_panel = gr.Markdown()
 
     output_components = [checklist_panel, timeline_gallery, summary_panel, technical_panel]
-    run_btn.click(fn=run_brief, inputs=[brief, mode], outputs=output_components)
-    replay_btn.click(fn=replay_demo, inputs=[], outputs=output_components)
+    run_btn.click(
+        fn=lambda brief, mode, selected_demo: _gallery_layout_outputs(
+            run_brief(brief, mode, selected_demo)
+        ),
+        inputs=[brief, mode, demo_selector],
+        outputs=output_components,
+    )
+    replay_btn.click(
+        fn=lambda selected_demo: _gallery_layout_outputs(replay_demo(selected_demo)),
+        inputs=[demo_selector],
+        outputs=output_components,
+    )
+    mode.change(
+        fn=_demo_choices_update,
+        inputs=[mode],
+        outputs=[demo_selector],
+    )
 
 if __name__ == "__main__":
     app.launch(css=APP_CSS)

@@ -1,51 +1,125 @@
-# image-unit-tests
+# Image Unit Tests
 
-image-unit-tests is a deterministic image-generation agent designed to turn a user brief into structured constraints, generate an image, verify it with SAM masks and pure Python logic, and iterate until it passes or reaches the configured round limit.
+**Self-verifying image generation agent using Muse Spark, Muse Image, and SAM 3.1.**
 
-Built during Meta Global AI Developer Hackathon (Indie track, 'Push the Frontier').
+Image Unit Tests turns an image brief into explicit requirements, generates an image, and checks whether the result satisfies those requirements. When it finds a mismatch, it can give the image model a targeted correction and verify the result again.
 
-IMPORTANT_RULES_AND_RESSOURCES.md (rules, links, docs) and .env (secrets) must exist in the repo root. The .env file is git-ignored; contributors should copy .env.example to .env before running any real API work.
+## The Problem
 
-Architecture diagram:
+Image generators can miss hard constraints: the exact number of objects, where an object appears, or whether something is absent. People are left manually counting objects, spotting mistakes, and re-prompting until the image looks right.
 
-+--------------------+    +--------------------+    +--------------------+
-| User brief         | -> | SparkClient        | -> | Constraints JSON   |
-+--------------------+    +--------------------+    +--------------------+
-          |                                   |
-          v                                   v
-+--------------------+    +--------------------+    +--------------------+
-| ImageClient        | -> | SAM masks          | -> | Verifier           |
-+--------------------+    +--------------------+    +--------------------+
-          |                                   |
-          +-------------------> Agent loop <------------------+
-                               |
-                               v
-                      Fix instructions / logging
+## The Solution
 
-Configure `config.yaml` and `.env` by setting the Meta or Baseten base URLs, API keys, and model IDs that already exist in the workspace. The example file records the expected env names without exposing secrets.
+A closed-loop agent makes image generation measurable:
 
-Run tests:
+- **Muse Spark** turns the brief into structured constraints.
+- **Muse Image** generates or edits the image.
+- **SAM 3.1** segments requested objects.
+- A **deterministic Python verifier** checks counts, presence, absence, and position.
+- If a check fails, the agent creates a specific correction—for example, “The image contains 9 green apples, which is 1 too many. You must remove exactly 1 green apple.”—and sends it with the current image for editing.
 
-```bash
-pytest
+The LLM proposes; deterministic Python decides whether the image passes.
+
+## Benchmark: the loop beats blind retries
+
+We evaluated 30 briefs per mode with live models. Each mode completed all 30 briefs without recorded API errors.
+
+| Mode | Pass Rate | Avg Rounds (iterative modes) | Avg Cost per Image* |
+|---|---:|---:|---:|
+| One-shot | 70% (21/30) | — | $0.0173 |
+| Pass@4 | 77% (23/30) | — | $0.0172 |
+| Random Retry | 77% (23/30) | 1.97 | $0.0171 |
+| **Loop** | **83% (25/30)** | **1.70** | **$0.0168** |
+
+The closed-loop system improved pass rate by 6 percentage points over pass@4 and by 6 points over blind random retries. It averaged 1.70 image rounds per brief, compared with four independent generations for pass@4—less than half as many generation-and-verification rounds.
+
+*Costs are configured Image/SAM estimates, not provider billing totals. Spark request costs are excluded. Pass@4 generates four images per brief; its pass rate is the fraction of briefs with at least one passing image.*
+
+## Architecture
+
+```text
+                         +--------------------+
+                         | User brief         |
+                         +---------+----------+
+                                   |
+                                   v
+                         +--------------------+
+                         | Muse Spark         |
+                         | Constraint proposal|
+                         +---------+----------+
+                                   |
+                                   v
+                         +--------------------+
+                         | Muse Image         |
+                         | Generate image     |
+                         +---------+----------+
+                                   |
+                                   v
+                         +--------------------+
+                         | SAM 3.1            |
+                         | Segment objects    |
+                         +---------+----------+
+                                   |
+                                   v
+                         +--------------------+
+                         | Python verifier    |
+                         | Deterministic check|
+                         +---------+----------+
+                                   |
+                      +------------+------------+
+                      |                         |
+                    PASS                      FIX
+                      |                         |
+                      v                         v
+                Return result      Numeric instruction + image
+                                                |
+                                                v
+                                        Muse Image edit
+                                                |
+                                                +----> SAM 3.1
 ```
 
-Mock mode:
+## Run the demo
+
+### Install
 
 ```bash
-python -m src.eval.run_eval --mode loop --max-cost 2.00
+pip install -r requirements.txt
 ```
 
-Live mode:
+### Configure live API access (optional)
+
+Copy the example environment file and add your Meta and Baseten credentials:
 
 ```bash
-python -m src.eval.run_eval --mode loop --max-cost 2.00 --live
+cp .env.example .env
 ```
 
-To run the Gradio UI:
+Set `META_API_KEY`, `BASETEN_API_KEY`, and the Baseten configuration values required by your `config.yaml`. Keep `.env` private; it is git-ignored.
+
+### Launch the UI
 
 ```bash
 python -m src.ui.app
 ```
 
-The project includes deterministic mock clients so the pipeline can run without credits or network access.
+Select **Demo replay** to view the pre-captured **Apples** scenario offline. The saved Apples, Spatial, and Absence scenarios are included in `runs/demos/` and do not require API credentials to replay.
+
+## Evaluation
+
+The live evaluation harness supports one-shot, blind random retries, pass@4, and feedback-driven loop modes:
+
+```bash
+python -m src.eval.run_eval --mode one-shot --max-cost 4.00 --live
+python -m src.eval.run_eval --mode random_retry --max-cost 4.00 --live
+python -m src.eval.run_eval --mode pass@4 --max-cost 4.00 --live
+python -m src.eval.run_eval --mode loop --max-cost 4.00 --live
+```
+
+The `--max-cost` guard estimates configured Image/SAM costs and excludes Spark costs. To run without network access or API credentials, omit `--live` to use the mock clients.
+
+Run the test suite with:
+
+```bash
+python -m pytest -q
+```

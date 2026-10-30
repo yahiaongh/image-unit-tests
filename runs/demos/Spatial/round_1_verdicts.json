@@ -1,0 +1,22 @@
+[
+  {
+    "constraint_id": "count_golden_retriever",
+    "passed": true,
+    "reason": "Found the expected 1 objects."
+  },
+  {
+    "constraint_id": "position_golden_retriever",
+    "passed": true,
+    "reason": "Centroid (0.30958801995927343, 0.5450813680397084) is within left region."
+  },
+  {
+    "constraint_id": "count_blue_ball",
+    "passed": true,
+    "reason": "Found the expected 1 objects."
+  },
+  {
+    "constraint_id": "position_blue_ball",
+    "passed": true,
+    "reason": "Centroid (0.797156577544857, 0.7704855898768284) is within right region."
+  }
+]

@@ -1,7 +1,10 @@
 .env
 runs/*
 !runs/.gitkeep
+!runs/demos/
+!runs/demos/**
 __pycache__/
 *.pyc
 .pytest_cache/
 .venv/
+docs/reference/

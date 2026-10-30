@@ -1,0 +1,17 @@
+[
+  {
+    "constraint_id": "count_trees",
+    "passed": true,
+    "reason": "Found the expected 3 objects."
+  },
+  {
+    "constraint_id": "absence_people",
+    "passed": true,
+    "reason": "No matching objects were detected."
+  },
+  {
+    "constraint_id": "presence_landscape",
+    "passed": true,
+    "reason": "At least one object is present."
+  }
+]

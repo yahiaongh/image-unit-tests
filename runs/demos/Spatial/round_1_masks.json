@@ -1,0 +1,34 @@
+[
+  {
+    "prompt": "blue ball",
+    "score": 0.0,
+    "box": [
+      1363,
+      826,
+      1701,
+      1143
+    ],
+    "area_ratio": 0.034356689453125,
+    "centroid": [
+      0.797156577544857,
+      0.7704855898768284
+    ],
+    "mask_path": "round_1_mask_0.png"
+  },
+  {
+    "prompt": "golden retriever",
+    "score": 0.0,
+    "box": [
+      0,
+      103,
+      942,
+      1240
+    ],
+    "area_ratio": 0.22912801106770833,
+    "centroid": [
+      0.30958801995927343,
+      0.5450813680397084
+    ],
+    "mask_path": "round_1_mask_1.png"
+  }
+]

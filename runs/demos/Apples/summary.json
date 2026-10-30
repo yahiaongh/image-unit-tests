@@ -1,0 +1,38 @@
+{
+  "brief": "a bowl with exactly 8 green apples, no other fruit",
+  "rounds": 2,
+  "final_passed": true,
+  "constraints": [
+    {
+      "id": "count_green_apples",
+      "type": "count",
+      "description": "Exactly 8 green apples visible",
+      "object_prompt": "green apple",
+      "expected_count": 8,
+      "position": null,
+      "min_area_ratio": null,
+      "max_area_ratio": null
+    },
+    {
+      "id": "presence_bowl",
+      "type": "presence",
+      "description": "Bowl containing the apples is visible",
+      "object_prompt": "bowl",
+      "expected_count": null,
+      "position": null,
+      "min_area_ratio": null,
+      "max_area_ratio": null
+    },
+    {
+      "id": "absence_other_fruit",
+      "type": "absence",
+      "description": "No fruit other than green apples is visible",
+      "object_prompt": "other fruit",
+      "expected_count": null,
+      "position": null,
+      "min_area_ratio": null,
+      "max_area_ratio": null
+    }
+  ],
+  "run_dir": "runs/20261029T162820Z"
+}

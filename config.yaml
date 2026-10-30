@@ -1,5 +1,6 @@
 meta:
-  base_url: "TODO"
+  # source: https://dev.meta.ai/docs/quickstart — "Base URL: https://api.meta.ai/v1"
+  base_url: "https://api.meta.ai/v1"
   api_key_env: "META_API_KEY"
 
 basten:
@@ -9,15 +10,21 @@ basten:
 models:
   spark:
     model_id: "meta-models/muse-spark-open-1026"
-    endpoint: "TODO"
+    # source: https://docs.baseten.co/reference/inference-api/chat-completions — "curl https://inference.baseten.co/v1/chat/completions"
+    endpoint: "/chat/completions"
     temperature: 0.0
   image:
-    model_id: "TODO: muse-image-xxx"
-    endpoint: "TODO"
-    edit_endpoint: "TODO"
+    # source: https://github.com/meta-models/meta-model-cookbook/blob/main/05_muse_image/01_image_api_fundamentals/README.md:7 — "**Model** | `muse-image-1.0`"
+    model_id: "muse-image-1.0"
+    # source: https://github.com/meta-models/meta-model-cookbook/blob/main/05_muse_image/01_image_api_fundamentals/README.md:91 — "turn1 = client.responses.create("
+    endpoint: "/responses"
+    # source: https://github.com/meta-models/meta-model-cookbook/blob/main/05_muse_image/01_image_api_fundamentals/README.md:123 — "turn2 = client.responses.create("
+    edit_endpoint: "/responses"
   sam:
-    model_id: "TODO: sam-3.1"
-    endpoint: "TODO"
+    # source: https://github.com/meta-models/meta-model-cookbook/blob/main/07_sam/01_api_basics/README.md:8 — "**Model** | `sam-3.1`"
+    model_id: "sam-3.1"
+    # source: https://github.com/meta-models/meta-model-cookbook/blob/main/07_sam/01_api_basics/python/sam_api.py:120 — "stream = await api.responses.create("
+    endpoint: "/responses"
 
 agent:
   max_rounds: 4
@@ -32,4 +39,7 @@ eval:
 
 mock:
   enabled: false
-  force_fail_first_round: false
+  spark: false
+  image: false
+  sam: false
+  force_fail_first_round: true

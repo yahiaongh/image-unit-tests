@@ -141,44 +141,50 @@ class MockSamClient:
         self.config = config or {}
         self.mask_map = mask_map or {}
         self.force_fail_first_round = force_fail_first_round
-        self._forced_first_round = False
+        self._calls: dict[str, int] = {}
 
     def segment(self, image_bytes: bytes, text_prompt: str) -> list[dict]:
         if text_prompt in self.mask_map:
             return self.mask_map[text_prompt]
 
         with Image.open(BytesIO(image_bytes)) as image:
+            width, height = image.size
             brief = image.info.get("brief", "")
 
+        prompt = text_prompt.lower()
+        call_number = self._calls.get(prompt, 0)
+        self._calls[prompt] = call_number + 1
         count_and_object = _brief_count_and_object(brief)
-        matching_chair_prompt = bool(
-            count_and_object
-            and "chair" in count_and_object[1].lower()
-            and "chair" in text_prompt.lower()
-        )
-        count = 1
-        if matching_chair_prompt:
-            count = count_and_object[0]
-        if self.force_fail_first_round and matching_chair_prompt and not self._forced_first_round:
+        if "person" in prompt:
+            count = 0
+        elif "chair" in prompt:
+            count = (
+                count_and_object[0]
+                if count_and_object and "chair" in count_and_object[1].lower()
+                else 3
+            )
+        else:
+            count = 1
+        if self.force_fail_first_round and "chair" in prompt and call_number == 0:
             count += 1
-            self._forced_first_round = True
 
         columns = min(4, max(1, math.ceil(math.sqrt(count))))
         rows = math.ceil(count / columns)
-        cell_width = 64 // columns
-        cell_height = 64 // rows
         masks = []
         for index in range(count):
             row, column = divmod(index, columns)
-            x1 = column * cell_width + max(1, cell_width // 4)
-            y1 = row * cell_height + max(1, cell_height // 4)
-            x2 = min((column + 1) * cell_width - 1, x1 + max(2, cell_width // 2))
-            y2 = min((row + 1) * cell_height - 1, y1 + max(2, cell_height // 2))
-            mask = np.zeros((64, 64), dtype=bool)
-            mask[y1:y2, x1:x2] = True
+            if "logo" in prompt:
+                x0, y0 = int(width * 0.78), int(height * 0.76)
+            else:
+                x0 = int(width * (0.1 + 0.2 * column))
+                y0 = int(height * (0.35 + 0.3 * row))
+            x1 = min(width, x0 + max(2, int(width * 0.12)))
+            y1 = min(height, y0 + max(2, int(height * 0.18)))
+            mask = np.zeros((height, width), dtype=bool)
+            mask[y0:y1, x0:x1] = True
             masks.append({
                 "mask": mask,
                 "score": 0.95,
-                "box": [x1, y1, x2, y2],
+                "box": [x0, y0, x1, y1],
             })
         return masks
