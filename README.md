@@ -20,20 +20,69 @@ A closed-loop agent makes image generation measurable:
 
 The LLM proposes; deterministic Python decides whether the image passes.
 
-## Benchmark: the loop beats blind retries
+## Results
 
-We evaluated 30 briefs per mode with live models. Each mode completed all 30 briefs without recorded API errors.
+**We tested whether a segmentation-based verifier can close the loop on image generation. On hard counts, ours didn't, and here's the evidence.**
 
-| Mode | Pass Rate | Avg Rounds (iterative modes) | Avg Cost per Image* |
-|---|---:|---:|---:|
-| One-shot | 70% (21/30) | — | $0.0173 |
-| Pass@4 | 77% (23/30) | — | $0.0172 |
-| Random Retry | 77% (23/30) | 1.97 | $0.0171 |
-| **Loop** | **83% (25/30)** | **1.70** | **$0.0168** |
+On the human-verified N=19 overcount cohort, single-step edits had these
+human-counted mean absolute error reductions:
 
-The closed-loop system improved pass rate by 6 percentage points over pass@4 and by 6 points over blind random retries. It averaged 1.70 image rounds per brief, compared with four independent generations for pass@4—less than half as many generation-and-verification rounds.
+| Condition | Mean Error Reduction (Human-Verified) |
+| :--- | ---: |
+| Numeric Feedback | +3.79 |
+| Generic Feedback | +0.74 |
+| Marked Image | +0.11 |
+| Control | -0.37 |
 
-*Costs are configured Image/SAM estimates, not provider billing totals. Spark request costs are excluded. Pass@4 generates four images per brief; its pass rate is the fraction of briefs with at least one passing image.*
+Error reduction is the starting human-counted absolute error minus the edited
+human-counted absolute error; positive values mean lower error after editing.
+Numeric feedback's mean reduction was about **5.1x** Generic feedback's.
+
+Among 11 edited images SAM passed, a blinded human count disagreed on 8
+(72.7%, 95% Wilson CI 43–90%, n=11). The experiment records SAM counts and
+human counts, but does not preserve the verifier's `UNCERTAIN` status for
+these edited images. Therefore the UNCERTAIN catch rate cannot be calculated
+from the saved evidence; we do not claim a catch count.
+
+The image generator produced human-reported artifacts in 7/21 starting images
+(33.3%); edited outcomes had artifacts in 25/84 images (29.8%). This is a
+descriptive comparison, not a significance test. Only 1/21 Numeric outcomes
+(4.8%) had both the expected human count and no reported artifact. The
+multi-round trajectory is incomplete and is not reported as a comparative
+success-rate result.
+
+Of 105 generated images, exactly 1 survived every check: human-correct count,
+no artifacts, and passed the verifier.
+
+**The Goodhart's Law of Image Verifiers**
+
+A verifier that judges its own edits can report a pass when a blinded human
+count disagrees. Human review is therefore required for defensible synthetic
+CV data; `UNCERTAIN` is available for ambiguous mask cases, but its catch rate
+in this audit was not logged and must not be presented as measured.
+
+The single surviving image can be exported as a format demonstration in
+COCO-shaped form with:
+
+```bash
+python -m scripts.export_coco
+```
+
+The saved experiment did not retain instance masks, so its annotation uses a
+documented dummy full-image box. This is a format demonstration of the single
+surviving image, not an instance-level training label. The metadata marks the image
+`human_verified: true`, `artifact: false`, and
+`mask_quality: "placeholder_full_frame"`.
+
+**The 30% Artifact Problem**
+
+The image model introduced visible seams or other artifacts in 7/21 audited
+starting images (33.3%) and 25/84 edited images (29.8%). A numeric outcome
+qualified as an **Accepted Clean Image** only when the human-verified count
+matched the expected count and the human reported no visible artifact; this
+occurred in 1/21 Numeric outcomes (4.8%). These audit results show why a
+deterministic verifier must be paired with human review: it cannot establish
+visual quality or ground-truth accuracy on its own.
 
 ## Architecture
 
@@ -105,6 +154,17 @@ python -m src.ui.app
 
 Select **Demo replay** to view the pre-captured **Apples** scenario offline. The saved Apples, Spatial, and Absence scenarios are included in `runs/demos/` and do not require API credentials to replay.
 
+### Human audit UI
+
+With the project environment active, launch the blinded single-image audit app:
+
+```bash
+python -m scripts.audit_ui
+```
+
+It serves locally on `http://127.0.0.1:7861` and saves human counts and artifact
+checks to `runs/audit/master_ground_truth.csv`.
+
 ## Evaluation
 
 The live evaluation harness supports one-shot, blind random retries, pass@4, and feedback-driven loop modes:
@@ -117,6 +177,17 @@ python -m src.eval.run_eval --mode loop --max-cost 4.00 --live
 ```
 
 The `--max-cost` guard estimates configured Image/SAM costs and excludes Spark costs. To run without network access or API credentials, omit `--live` to use the mock clients.
+
+## Limitations
+
+- Undercounts (for example, generating 7 apples when asked for 8) can cause the editor to overshoot when instructed to “add 1”. Only two undercount failures occurred in this experiment, so this result is not well-powered.
+- The human audit found 8 false passes among 11 SAM pass predictions (72.7%). SAM count equality alone is therefore not a trustworthy human-verified acceptance criterion for this sample.
+- Visible artifacts were reported for 25/84 edited images (29.8%); the numeric arm's artifact rate was 6/21 (28.6%). The accepted-clean rate for numeric outcomes was 1/21 (4.8%).
+- The single-step CSV does not retain per-image `UNCERTAIN` verdict statuses, so the verifier's catch rate for the eight false passes is not measurable from this audit.
+- SAM can occasionally false-fail touching or overlapping objects. The verifier can mark some large or overlapping-mask count cases `UNCERTAIN`; this does not independently establish the true object count or visual quality.
+- Multi-round evaluation crashed and did not complete.
+- Undercount starts (n=2) were excluded.
+- Hard prompts only.
 
 Run the test suite with:
 
