@@ -1,6 +1,6 @@
 {
   "brief": "a bowl with exactly 8 green apples, no other fruit",
-  "rounds": 2,
+  "rounds": 4,
   "final_passed": true,
   "constraints": [
     {
@@ -26,7 +26,7 @@
     {
       "id": "absence_other_fruit",
       "type": "absence",
-      "description": "No fruit other than green apples is visible",
+      "description": "No fruit other than green apples visible",
       "object_prompt": "other fruit",
       "expected_count": null,
       "position": null,
@@ -34,5 +34,5 @@
       "max_area_ratio": null
     }
   ],
-  "run_dir": "runs/20261029T162820Z"
+  "run_dir": "runs/20261029T143030Z"
 }

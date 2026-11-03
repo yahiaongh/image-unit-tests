@@ -1,8 +1,8 @@
 [
   {
     "constraint_id": "count_green_apples",
-    "passed": true,
-    "reason": "Found the expected 8 objects."
+    "passed": false,
+    "reason": "Expected 8 objects but found 9."
   },
   {
     "constraint_id": "presence_bowl",

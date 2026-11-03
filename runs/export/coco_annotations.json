@@ -1,0 +1,51 @@
+{
+  "info": {
+    "description": "Human-audited synthetic image export. The annotation uses a dummy full-image bounding box because SAM instance masks were not available in the saved experiment artifacts; it is not an instance-level training annotation.",
+    "version": "1.0"
+  },
+  "licenses": [],
+  "images": [
+    {
+      "id": 1,
+      "file_name": "images/accepted_numeric_ss015_seed_2.png",
+      "width": 1920,
+      "height": 1280,
+      "expected_count": 12,
+      "human_verified_count": 12,
+      "human_verified": true,
+      "artifact": false,
+      "mask_quality": "placeholder_full_frame",
+      "source_brief_id": "ss015",
+      "source_seed": 2
+    }
+  ],
+  "annotations": [
+    {
+      "id": 1,
+      "image_id": 1,
+      "category_id": 1,
+      "segmentation": [],
+      "area": 2457600,
+      "bbox": [
+        0,
+        0,
+        1920,
+        1280
+      ],
+      "iscrowd": 0,
+      "num_instances": 12,
+      "attributes": {
+        "human_verified": true,
+        "artifact": false,
+        "mask_quality": "placeholder_full_frame"
+      }
+    }
+  ],
+  "categories": [
+    {
+      "id": 1,
+      "name": "pillows",
+      "supercategory": "object"
+    }
+  ]
+}

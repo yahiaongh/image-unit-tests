@@ -22,7 +22,7 @@ The LLM proposes; deterministic Python decides whether the image passes.
 
 ## Results
 
-**We tested whether a segmentation-based verifier can close the loop on image generation. On hard counts, ours didn't, and here's the evidence.**
+**We tested whether a segmentation-based verifier can close the loop on image generation. Numeric feedback steered the editor (human-verified error reduction +3.79 vs +0.74 for generic), but SAM couldn't certify the result (8 of 11 passes were wrong).**
 
 On the human-verified N=19 overcount cohort, single-step edits had these
 human-counted mean absolute error reductions:
@@ -44,15 +44,23 @@ human counts, but does not preserve the verifier's `UNCERTAIN` status for
 these edited images. Therefore the UNCERTAIN catch rate cannot be calculated
 from the saved evidence; we do not claim a catch count.
 
+The SAM false-passes were off by exactly ±1 only 2 of 8 times. The signed
+human-minus-expected deviations were +1 (2), -2 (2), +2 (2), +7 (1), and +12
+(1). This sample does not support a claim that SAM is accurate to roughly ±1;
+most false-passes were off by more than one object.
+
 The image generator produced human-reported artifacts in 7/21 starting images
 (33.3%); edited outcomes had artifacts in 25/84 images (29.8%). This is a
 descriptive comparison, not a significance test. Only 1/21 Numeric outcomes
-(4.8%) had both the expected human count and no reported artifact. The
-multi-round trajectory is incomplete and is not reported as a comparative
-success-rate result.
+(4.8%) had both the expected human count and no reported artifact.
 
-Of 105 generated images, exactly 1 survived every check: human-correct count,
-no artifacts, and passed the verifier.
+**The Yield Funnel:** 105 images generated → 84 edited → 11 SAM-passed → 3
+human-correct → 1 artifact-free.
+
+This is a hard-count pilot with n=19 hard overcounts and n=11 SAM passes.
+Multi-round evaluation crashed and did not complete. Undercounts (n=2) were
+excluded. Human labels were provided by a single human counter plus one
+recounter.
 
 **The Goodhart's Law of Image Verifiers**
 

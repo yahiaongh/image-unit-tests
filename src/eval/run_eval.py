@@ -16,7 +16,7 @@ from src.json_utils import parse_constraints
 from src.schema import Constraint
 from src.verifier import filter_masks, verify_all
 
-EVAL_MODES = ("one-shot", "random_retry", "pass@4", "loop")
+EVAL_MODES = ("one-shot", "random_retry", "pass@4", "generic_loop", "loop")
 
 
 def _as_bool(value) -> bool:
@@ -48,7 +48,7 @@ def estimate_cost(mode: str, prompt_count: int, rounds: int, config: dict) -> fl
     eval_cfg = config.get("eval", {})
     image_cost = float(eval_cfg.get("cost_per_image_usd", 0.01))
     sam_cost = float(eval_cfg.get("cost_per_sam_call_usd", 0.0025))
-    image_count = {"one-shot": 1, "pass@4": 4}.get(mode, max(1, rounds))
+    image_count = 1 if mode == "one-shot" else max(1, rounds)
     return image_count * (image_cost + sam_cost * prompt_count)
 
 
@@ -57,12 +57,21 @@ def _verdicts_for_image(image_bytes, constraints, sam, config):
         image_shape = image.size
     unique_prompts = sorted({constraint.object_prompt for constraint in constraints})
     masks_by_prompt = {}
+    raw_masks_by_prompt = {}
     iou_threshold = float(config.get("agent", {}).get("iou_threshold", 0.5))
     for prompt in unique_prompts:
-        masks_by_prompt[prompt] = filter_masks(
-            sam.segment(image_bytes, prompt), iou_threshold
-        )
-    return verify_all(constraints, masks_by_prompt, image_shape), unique_prompts
+        raw_masks = sam.segment(image_bytes, prompt)
+        masks_by_prompt[prompt] = filter_masks(raw_masks, iou_threshold)
+        raw_masks_by_prompt[prompt] = raw_masks
+    return (
+        verify_all(
+            constraints,
+            masks_by_prompt,
+            image_shape,
+            ambiguity_masks_by_prompt=raw_masks_by_prompt,
+        ),
+        unique_prompts,
+    )
 
 
 def run_one_shot(brief: dict, config: dict, clients, constraints: list[Constraint]) -> EvalResult:
@@ -95,18 +104,18 @@ def run_pass_at_four(
         image_bytes = image.generate(brief["brief"])
         verdicts, _ = _verdicts_for_image(image_bytes, constraints, sam, config)
         failed = [item["constraint_id"] for item in verdicts if not item["passed"]]
-        if not failed and first_passing_attempt is None:
+        if not failed:
             first_passing_attempt = attempt
-        if failed:
-            last_failed_constraints = failed
+            break
+        last_failed_constraints = failed
 
     attempts_to_pass = first_passing_attempt or 4
     return EvalResult(
         passed=first_passing_attempt is not None,
         rounds=attempts_to_pass,
         attempts=attempts_to_pass,
-        images_generated=4,
-        cost_usd=estimate_cost("pass@4", len(unique_prompts), 4, config),
+        images_generated=attempts_to_pass,
+        cost_usd=estimate_cost("pass@4", len(unique_prompts), attempts_to_pass, config),
         failed_constraints=[] if first_passing_attempt is not None else last_failed_constraints,
     )
 
@@ -164,6 +173,39 @@ def run_loop(brief: dict, config: dict, clients, constraints: list[Constraint]) 
     )
 
 
+def run_generic_loop(
+    brief: dict,
+    config: dict,
+    clients,
+    constraints: list[Constraint],
+) -> EvalResult:
+    from src.agent import Agent
+
+    spark, image, sam = clients
+    result = Agent(spark, image, sam, config).run(
+        brief["brief"],
+        constraints=constraints,
+        numeric_feedback=False,
+    )
+    rounds_used = len(result["rounds"])
+    failed = []
+    if result["rounds"]:
+        failed = [
+            item["constraint_id"]
+            for item in result["rounds"][-1]["verdicts"]
+            if not item["passed"]
+        ]
+    prompt_count = len({constraint.object_prompt for constraint in constraints})
+    return EvalResult(
+        passed=bool(result["final_passed"]),
+        rounds=rounds_used,
+        attempts=rounds_used,
+        images_generated=rounds_used,
+        cost_usd=estimate_cost("generic_loop", prompt_count, rounds_used, config),
+        failed_constraints=failed,
+    )
+
+
 def _write_results(output_dir: Path, rows: list[dict]) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     csv_path = output_dir / "results.csv"
@@ -172,6 +214,7 @@ def _write_results(output_dir: Path, rows: list[dict]) -> None:
             handle,
             fieldnames=[
                 "brief_id",
+                "brief",
                 "mode",
                 "passed",
                 "rounds",
@@ -190,8 +233,8 @@ def _write_summary(output_dir: Path, rows: list[dict]) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     modes = [mode for mode in EVAL_MODES if any(row["mode"] == mode for row in rows)]
     lines = [
-        "| Mode | Pass Rate | Avg Rounds (iterative modes) | Avg Cost per Image* |",
-        "|------|-----------|------------------------------|---------------------|",
+        "| Mode | Pass Rate | Avg Generations per Prompt | Avg Cost per Image* |",
+        "|------|-----------|----------------------------|---------------------|",
     ]
     for mode in modes:
         entries = [row for row in rows if row["mode"] == mode]
@@ -201,20 +244,18 @@ def _write_summary(output_dir: Path, rows: list[dict]) -> None:
             if evaluated_entries
             else 0.0
         )
-        if mode in ("random_retry", "loop"):
-            avg_rounds = (
-                sum(float(row["rounds"]) for row in evaluated_entries) / len(evaluated_entries)
-                if evaluated_entries
-                else 0.0
-            )
-            rounds_text = f"{avg_rounds:.2f}"
-        else:
-            rounds_text = "—"
+        avg_generations = (
+            sum(int(row["images_generated"]) for row in evaluated_entries)
+            / len(evaluated_entries)
+            if evaluated_entries
+            else 0.0
+        )
+        generations_text = f"{avg_generations:.2f}" if evaluated_entries else "—"
         image_count = sum(int(row["images_generated"]) for row in evaluated_entries)
         total_cost = sum(float(row["cost_usd"]) for row in evaluated_entries)
         avg_cost = total_cost / image_count if image_count else 0.0
         lines.append(
-            f"| {mode} | {pass_rate:.2f} | {rounds_text} | ${avg_cost:.4f} |"
+            f"| {mode} | {pass_rate:.2f} | {generations_text} | ${avg_cost:.4f} |"
         )
     error_counts = [
         f"{mode}: {sum(bool(row.get('error')) for row in rows if row['mode'] == mode)}"
@@ -222,7 +263,7 @@ def _write_summary(output_dir: Path, rows: list[dict]) -> None:
     ]
     lines.extend([
         "",
-        "*Configured Image/SAM cost estimates; Spark costs are excluded. Rows with API errors are excluded from pass-rate, round, and per-image cost averages.",
+        "*Configured Image/SAM cost estimates; Spark costs are excluded. Rows with API errors are excluded from pass-rate, generation, and per-image cost averages.",
         f"API error counts — {', '.join(error_counts)}.",
     ])
     (output_dir / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -273,6 +314,7 @@ def main() -> None:
             message = f"{type(exc).__name__}: {exc}"
             rows.append({
                 "brief_id": brief["id"],
+                "brief": brief["brief"],
                 "mode": args.mode,
                 "passed": False,
                 "rounds": 0,
@@ -287,9 +329,13 @@ def main() -> None:
             _write_summary(output_dir, rows)
             continue
         prompt_count = len({constraint.object_prompt for constraint in constraints})
-        reserved_mode = "loop" if args.mode == "loop" else args.mode
+        reserved_mode = "loop" if args.mode in ("loop", "generic_loop") else args.mode
         reserved_rounds = (
-            max_rounds if args.mode in ("loop", "random_retry") else 1
+            4
+            if args.mode in ("random_retry", "pass@4")
+            else max_rounds
+            if args.mode in ("loop", "generic_loop")
+            else 1
         )
         reserve = estimate_cost(reserved_mode, prompt_count, reserved_rounds, config)
         if reserved_spend + reserve > max_cost:
@@ -308,18 +354,21 @@ def main() -> None:
                 result = run_random_retry(brief, config, clients, constraints)
             elif args.mode == "pass@4":
                 result = run_pass_at_four(brief, config, clients, constraints)
+            elif args.mode == "generic_loop":
+                result = run_generic_loop(brief, config, clients, constraints)
             else:
                 result = run_loop(brief, config, clients, constraints)
         except Exception as exc:
             message = f"{type(exc).__name__}: {exc}"
             max_images = (
                 4 if args.mode in ("pass@4", "random_retry")
-                else max_rounds if args.mode == "loop"
+                else max_rounds if args.mode in ("loop", "generic_loop")
                 else 1
             )
             spent += reserve
             rows.append({
                 "brief_id": brief["id"],
+                "brief": brief["brief"],
                 "mode": args.mode,
                 "passed": False,
                 "rounds": 0,
@@ -341,6 +390,7 @@ def main() -> None:
         spent += result.cost_usd
         rows.append({
             "brief_id": brief["id"],
+            "brief": brief["brief"],
             "mode": args.mode,
             "passed": result.passed,
             "rounds": result.rounds,

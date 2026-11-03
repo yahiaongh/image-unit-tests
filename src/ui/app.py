@@ -20,9 +20,14 @@ from src.clients import get_clients
 from src.config import load_config
 
 LOGGER = logging.getLogger(__name__)
-MASK_COLORS = {"passed": (34, 197, 94), "failed": (239, 68, 68)}
+MASK_COLORS = {
+    "passed": (34, 197, 94),
+    "failed": (239, 68, 68),
+    "uncertain": (250, 204, 21),
+}
 GREEN = "#22c55e"
 RED = "#ef4444"
+YELLOW = "#eab308"
 GREY = "#6b7280"
 MODES = (
     "Mock (no API, instant)",
@@ -82,19 +87,32 @@ def render_round_overlay(
         valid_verdicts = [item for item in verdicts if isinstance(item, dict)]
         passed_count = sum(bool(item.get("passed")) for item in valid_verdicts)
         caption_text = f"Round {round_index} — {passed_count}/{len(valid_verdicts)} passed"
+        uncertain_ids = [
+            str(item.get("constraint_id", ""))
+            for item in valid_verdicts
+            if item.get("status") == "UNCERTAIN"
+        ]
         failed_ids = [
             str(item.get("constraint_id", ""))
             for item in valid_verdicts
-            if not item.get("passed")
+            if not item.get("passed") and item.get("status") != "UNCERTAIN"
         ]
         if failed_ids:
             caption_text += f" — failed: {', '.join(failed_ids)}"
+        if uncertain_ids:
+            caption_text += f" — uncertain: {', '.join(uncertain_ids)}"
 
         prompt_status: dict[str, str] = {}
         for item in valid_verdicts:
             prompt = item.get("object_prompt")
             if prompt:
-                status = "passed" if item.get("passed") else "failed"
+                status = (
+                    "uncertain"
+                    if item.get("status") == "UNCERTAIN"
+                    else "passed"
+                    if item.get("passed")
+                    else "failed"
+                )
                 if prompt not in prompt_status or status == "failed":
                     prompt_status[prompt] = status
 
@@ -227,7 +245,8 @@ def _build_checklist(constraints, verdicts) -> str:
     for constraint in constraints:
         verdict = verdict_by_id.get(constraint.id, {})
         passed = bool(verdict.get("passed"))
-        color = GREEN if passed else RED
+        uncertain = verdict.get("status") == "UNCERTAIN"
+        color = GREEN if passed else YELLOW if uncertain else RED
         sentence = html.escape(_constraint_sentence(constraint))
         identifier = html.escape(str(constraint.id))
         row = (
@@ -273,13 +292,14 @@ def _round_sentence(verdicts: list[dict], constraints_by_id: dict) -> str:
 def _timeline_card(
     image: Image.Image,
     round_index: int,
-    passed: bool,
+    status: str,
     footer: str,
     fix_instruction: str | None = None,
 ) -> Image.Image:
     font = ImageFont.load_default(size=20)
-    badge_text = "PASSED" if passed else "FAILED"
-    badge_color = MASK_COLORS["passed" if passed else "failed"]
+    badge_text = status
+    badge_key = {"PASSED": "passed", "FAILED": "failed", "UNCERTAIN": "uncertain"}[status]
+    badge_color = MASK_COLORS[badge_key]
     footer_lines = textwrap.wrap(footer, width=max(20, image.width // 10)) or [""]
     fix_lines = (
         textwrap.wrap(f"Fix requested: {fix_instruction}", width=max(20, image.width // 10))
@@ -327,6 +347,8 @@ def _friendly_fix(round_data: dict, constraints_by_id: dict) -> str | None:
     for verdict in round_data.get("verdicts", []):
         if verdict.get("passed"):
             continue
+        if verdict.get("status") == "UNCERTAIN":
+            return "Make the objects clearly separated and individually visible."
         constraint = constraints_by_id.get(verdict.get("constraint_id"))
         if not constraint:
             continue
@@ -408,7 +430,8 @@ def _gallery_and_technical(constraints, round_data, run_dir):
             if constraint:
                 verdict["object_prompt"] = constraint.object_prompt
         passed = bool(item.get("passed", all(v.get("passed") for v in verdicts)))
-        status = "PASSED" if passed else "FAILED"
+        uncertain = any(verdict.get("status") == "UNCERTAIN" for verdict in verdicts)
+        status = "UNCERTAIN" if uncertain else "PASSED" if passed else "FAILED"
         footer = _round_sentence(verdicts, constraints_by_id)
         rendered, _ = render_round_overlay(
             item.get("image_path_or_bytes"),
@@ -422,7 +445,7 @@ def _gallery_and_technical(constraints, round_data, run_dir):
             if fix and str(fix).strip() != "No fix needed.":
                 caption += f" — Fix requested: {fix}"
             gallery_items.append(
-                (_timeline_card(rendered, round_index, passed, footer, fix), caption)
+                (_timeline_card(rendered, round_index, status, footer, fix), caption)
             )
     return gallery_items, last_verdicts
 

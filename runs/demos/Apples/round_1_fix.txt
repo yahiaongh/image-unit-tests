@@ -1,1 +1,1 @@
-Constraint 'Exactly 8 green apples visible' failed because Expected 8 objects but found 9. The image contains 9 green apples, which is 1 too many. You must remove exactly 1 green apple.
+Constraint 'Exactly 8 green apples visible' failed because Expected 8 objects but found 9. Adjust the composition to produce 8 green apple objects.

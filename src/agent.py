@@ -86,6 +86,13 @@ class Agent:
         for constraint, verdict in failed:
             reason = verdict.get("reason", "")
             detail = constraint.description
+            if verdict.get("status") == "UNCERTAIN":
+                parts.append(
+                    f"Constraint '{detail}' could not be verified reliably because "
+                    f"{reason} Make the objects clearly separated and individually "
+                    "visible so they can be counted."
+                )
+                continue
             if constraint.type == "count" and constraint.expected_count is not None:
                 found_count = len(verdict.get("masks_used") or [])
                 expected_count = constraint.expected_count
@@ -117,11 +124,17 @@ class Agent:
 
         return " ".join(parts)
 
-    def run(self, brief: str, constraints: list[Constraint] | None = None) -> dict:
+    def run(
+        self,
+        brief: str,
+        constraints: list[Constraint] | None = None,
+        numeric_feedback: bool = True,
+        initial_image: bytes | None = None,
+    ) -> dict:
         if constraints is None:
             raw_constraints = self.spark.generate_constraints(brief)
             constraints = parse_constraints(json.dumps(raw_constraints))
-        image_bytes = self.image.generate(brief)
+        image_bytes = initial_image if initial_image is not None else self.image.generate(brief)
 
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         run_dir = self.runs_dir / timestamp
@@ -133,12 +146,19 @@ class Agent:
 
         for round_index in range(1, self.max_rounds + 1):
             masks_by_prompt: dict[str, list[dict]] = {}
+            raw_masks_by_prompt: dict[str, list[dict]] = {}
             unique_prompts = sorted({constraint.object_prompt for constraint in constraints})
             for prompt in unique_prompts:
-                masks = self.sam.segment(image_bytes, prompt)
-                masks_by_prompt[prompt] = filter_masks(masks, self.iou_threshold)
+                raw_masks = self.sam.segment(image_bytes, prompt)
+                raw_masks_by_prompt[prompt] = raw_masks
+                masks_by_prompt[prompt] = filter_masks(raw_masks, self.iou_threshold)
 
-            verdicts = verify_all(constraints, masks_by_prompt, image_shape)
+            verdicts = verify_all(
+                constraints,
+                masks_by_prompt,
+                image_shape,
+                ambiguity_masks_by_prompt=raw_masks_by_prompt,
+            )
             fix_instruction = None
             if all(item["passed"] for item in verdicts):
                 final_passed = True
@@ -164,7 +184,11 @@ class Agent:
                 self._save_round(run_dir, round_index, image_bytes, masks_by_prompt, verdicts, "")
                 break
 
-            fix_instruction = self._build_fix_instruction(constraints, verdicts)
+            fix_instruction = (
+                self._build_fix_instruction(constraints, verdicts)
+                if numeric_feedback
+                else "The image failed the constraint. Please fix the image to match the brief."
+            )
             all_rounds.append({
                 "round": round_index,
                 "passed": False,
@@ -190,4 +214,5 @@ class Agent:
             "final_image": image_bytes,
             "final_passed": final_passed,
             "constraints": constraints,
+            "run_dir": str(run_dir),
         }
