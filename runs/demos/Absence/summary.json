@@ -1,0 +1,38 @@
+{
+  "brief": "a landscape with exactly 3 trees, and no people anywhere",
+  "rounds": 1,
+  "final_passed": true,
+  "constraints": [
+    {
+      "id": "count_trees",
+      "type": "count",
+      "description": "Exactly 3 trees visible",
+      "object_prompt": "tree",
+      "expected_count": 3,
+      "position": null,
+      "min_area_ratio": null,
+      "max_area_ratio": null
+    },
+    {
+      "id": "absence_people",
+      "type": "absence",
+      "description": "No people visible",
+      "object_prompt": "person",
+      "expected_count": null,
+      "position": null,
+      "min_area_ratio": null,
+      "max_area_ratio": null
+    },
+    {
+      "id": "presence_landscape",
+      "type": "presence",
+      "description": "Landscape visible",
+      "object_prompt": "landscape",
+      "expected_count": null,
+      "position": null,
+      "min_area_ratio": null,
+      "max_area_ratio": null
+    }
+  ],
+  "run_dir": "runs/20261029T150556Z"
+}

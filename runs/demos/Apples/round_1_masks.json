@@ -1,0 +1,162 @@
+[
+  {
+    "prompt": "bowl",
+    "score": 0.0,
+    "box": [
+      180,
+      601,
+      1741,
+      1168
+    ],
+    "area_ratio": 0.12451171875,
+    "centroid": [
+      0.48605828737745094,
+      0.7615397926879085
+    ],
+    "mask_path": "round_1_mask_0.png"
+  },
+  {
+    "prompt": "green apple",
+    "score": 0.0,
+    "box": [
+      1331,
+      457,
+      1692,
+      861
+    ],
+    "area_ratio": 0.03359375,
+    "centroid": [
+      0.8005214768047481,
+      0.49798744852228677
+    ],
+    "mask_path": "round_1_mask_1.png"
+  },
+  {
+    "prompt": "green apple",
+    "score": 0.0,
+    "box": [
+      1087,
+      592,
+      1494,
+      920
+    ],
+    "area_ratio": 0.04299560546875,
+    "centroid": [
+      0.6687895507227175,
+      0.5970503683185698
+    ],
+    "mask_path": "round_1_mask_2.png"
+  },
+  {
+    "prompt": "green apple",
+    "score": 0.0,
+    "box": [
+      279,
+      382,
+      602,
+      670
+    ],
+    "area_ratio": 0.018932291666666667,
+    "centroid": [
+      0.22252670211127348,
+      0.39384804244218535
+    ],
+    "mask_path": "round_1_mask_3.png"
+  },
+  {
+    "prompt": "green apple",
+    "score": 0.0,
+    "box": [
+      297,
+      549,
+      692,
+      904
+    ],
+    "area_ratio": 0.04392740885416667,
+    "centroid": [
+      0.2602227363848852,
+      0.5668300844209677
+    ],
+    "mask_path": "round_1_mask_4.png"
+  },
+  {
+    "prompt": "green apple",
+    "score": 0.0,
+    "box": [
+      947,
+      398,
+      1314,
+      752
+    ],
+    "area_ratio": 0.029391682942708334,
+    "centroid": [
+      0.5805255359969358,
+      0.42849161956792603
+    ],
+    "mask_path": "round_1_mask_5.png"
+  },
+  {
+    "prompt": "green apple",
+    "score": 0.0,
+    "box": [
+      1080,
+      249,
+      1422,
+      575
+    ],
+    "area_ratio": 0.023625895182291665,
+    "centroid": [
+      0.6618711213107602,
+      0.29880774708075714
+    ],
+    "mask_path": "round_1_mask_6.png"
+  },
+  {
+    "prompt": "green apple",
+    "score": 0.0,
+    "box": [
+      582,
+      369,
+      946,
+      700
+    ],
+    "area_ratio": 0.031316731770833335,
+    "centroid": [
+      0.3981244342593074,
+      0.406272027343953
+    ],
+    "mask_path": "round_1_mask_7.png"
+  },
+  {
+    "prompt": "green apple",
+    "score": 0.0,
+    "box": [
+      669,
+      607,
+      1081,
+      928
+    ],
+    "area_ratio": 0.042971598307291664,
+    "centroid": [
+      0.45694444280050883,
+      0.6163613163071576
+    ],
+    "mask_path": "round_1_mask_8.png"
+  },
+  {
+    "prompt": "green apple",
+    "score": 0.0,
+    "box": [
+      686,
+      232,
+      1032,
+      515
+    ],
+    "area_ratio": 0.019732666015625,
+    "centroid": [
+      0.460041069526068,
+      0.273683788277142
+    ],
+    "mask_path": "round_1_mask_9.png"
+  }
+]

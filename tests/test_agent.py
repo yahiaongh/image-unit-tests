@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -79,8 +80,58 @@ def test_agent_runs_loop_until_constraints_pass_and_logs_rounds(tmp_path):
 
     assert result["final_passed"] is True
     assert len(result["rounds"]) == 2
-    assert "exactly 1 object" in result["rounds"][0]["fix_instruction"]
+    assert "The image contains 2 circles" in result["rounds"][0]["fix_instruction"]
+    assert "remove exactly 1 circle" in result["rounds"][0]["fix_instruction"]
     run_dir = next(tmp_path.iterdir())
     assert (run_dir / "summary.json").exists()
     assert any(path.name.startswith("round_1") for path in run_dir.iterdir())
     assert any(path.name.startswith("round_2") for path in run_dir.iterdir())
+    masks = json.loads((run_dir / "round_1_masks.json").read_text())
+    assert masks
+    assert set(masks[0]) == {
+        "prompt",
+        "score",
+        "box",
+        "area_ratio",
+        "centroid",
+        "mask_path",
+    }
+    with Image.open(run_dir / masks[0]["mask_path"]) as saved_mask:
+        assert saved_mask.mode == "L"
+        assert saved_mask.size == (100, 100)
+    verdicts = json.loads((run_dir / "round_1_verdicts.json").read_text())
+    assert all("masks_used" not in verdict for verdict in verdicts)
+
+
+def test_count_fix_instruction_specifies_exact_excess_and_shortfall():
+    constraint = Constraint(
+        id="apples",
+        type="count",
+        description="exactly 8 apples",
+        object_prompt="green apples",
+        expected_count=8,
+    )
+    agent = Agent(None, None, None, {})
+
+    too_many = agent._build_fix_instruction(
+        [constraint],
+        [{
+            "constraint_id": "apples",
+            "passed": False,
+            "reason": "Expected 8 objects but found 10.",
+            "masks_used": [object(), object(), object(), object(), object(),
+                           object(), object(), object(), object(), object()],
+        }],
+    )
+    too_few = agent._build_fix_instruction(
+        [constraint],
+        [{
+            "constraint_id": "apples",
+            "passed": False,
+            "reason": "Expected 8 objects but found 7.",
+            "masks_used": [object(), object(), object(), object(), object(), object(), object()],
+        }],
+    )
+
+    assert "remove exactly 2 green apples" in too_many
+    assert "add exactly 1 more green apple" in too_few

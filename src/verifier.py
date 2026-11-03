@@ -4,10 +4,15 @@ import numpy as np
 
 from src.schema import Constraint
 
+UNCERTAIN_MASK_AREA_RATIO = 0.40
+UNCERTAIN_MASK_IOU = 0.40
+
 
 def _iou(mask_a: np.ndarray, mask_b: np.ndarray) -> float:
     if mask_a.size == 0 or mask_b.size == 0:
         return 0.0
+    if mask_a.shape != mask_b.shape:
+        raise ValueError("Cannot calculate IoU for masks with different shapes")
     intersection = np.logical_and(mask_a, mask_b).sum()
     union = np.logical_or(mask_a, mask_b).sum()
     return float(intersection / union) if union else 0.0
@@ -70,25 +75,64 @@ def check_position(centroid: tuple[float, float], position: str, tolerance: floa
     raise ValueError(f"Unsupported position: {position}")
 
 
-def check_constraint(constraint: Constraint, masks: list[dict], image_shape: tuple[int, int]) -> dict:
-    """Return {\"constraint_id\": ..., \"passed\": bool, \"reason\": str, \"masks_used\": [...]}."""
-    reason = "" 
+def _count_ambiguity_reason(
+    masks: list[dict],
+    image_shape: tuple[int, int],
+) -> str | None:
+    image_area = image_shape[0] * image_shape[1]
+    valid_masks = []
+    for entry in masks:
+        mask = np.asarray(entry.get("mask", np.zeros((0, 0), dtype=bool)), dtype=bool)
+        if mask.ndim != 2 or not mask.any():
+            continue
+        valid_masks.append(mask)
+        if image_area and mask.sum() / image_area > UNCERTAIN_MASK_AREA_RATIO:
+            return "A detected mask covers more than 40% of the image."
+
+    for index, mask in enumerate(valid_masks):
+        for other in valid_masks[index + 1:]:
+            if _iou(mask, other) > UNCERTAIN_MASK_IOU:
+                return "Two detected masks overlap with IoU greater than 0.4."
+    return None
+
+
+def check_constraint(
+    constraint: Constraint,
+    masks: list[dict],
+    image_shape: tuple[int, int],
+    ambiguity_masks: list[dict] | None = None,
+) -> dict:
+    """Return the deterministic verdict and masks used for evaluation."""
+    reason = ""
     masks_used = []
     prompt_masks = list(masks)
+    status = "FAIL"
 
     if constraint.type == "count":
         count = len(prompt_masks)
         passed = count == constraint.expected_count
         reason = f"Expected {constraint.expected_count} objects but found {count}." if not passed else f"Found the expected {count} objects."
         masks_used = [mask.get("mask", None) for mask in prompt_masks]
+        ambiguity_reason = _count_ambiguity_reason(
+            prompt_masks if ambiguity_masks is None else ambiguity_masks,
+            image_shape,
+        )
+        if ambiguity_reason:
+            passed = False
+            status = "UNCERTAIN"
+            reason = f"{ambiguity_reason} {reason}"
+        else:
+            status = "PASS" if passed else "FAIL"
     elif constraint.type == "presence":
         passed = len(prompt_masks) > 0
         reason = "At least one object is present." if passed else "No matching object was found."
         masks_used = [mask.get("mask", None) for mask in prompt_masks]
+        status = "PASS" if passed else "FAIL"
     elif constraint.type == "absence":
         passed = len(prompt_masks) == 0
         reason = "No matching objects were detected." if passed else "Matching object detected when it should be absent."
         masks_used = [mask.get("mask", None) for mask in prompt_masks]
+        status = "PASS" if passed else "FAIL"
     elif constraint.type == "position":
         if not prompt_masks:
             passed = False
@@ -103,6 +147,7 @@ def check_constraint(constraint: Constraint, masks: list[dict], image_shape: tup
                 else f"Centroid {centroid} is outside the {constraint.position} region."
             )
             masks_used = [mask]
+        status = "PASS" if passed else "FAIL"
     elif constraint.type == "size":
         if not prompt_masks:
             passed = False
@@ -119,21 +164,35 @@ def check_constraint(constraint: Constraint, masks: list[dict], image_shape: tup
                 else f"Mask area ratio {ratio:.4f} is outside [{lower}, {upper}]."
             )
             masks_used = [mask]
+        status = "PASS" if passed else "FAIL"
     else:
         raise ValueError(f"Unsupported constraint type: {constraint.type}")
 
     return {
         "constraint_id": constraint.id,
         "passed": bool(passed),
+        "status": status,
         "reason": reason,
         "masks_used": masks_used,
     }
 
 
-def verify_all(constraints: list[Constraint], masks_by_prompt: dict[str, list[dict]], image_shape) -> list[dict]:
+def verify_all(
+    constraints: list[Constraint],
+    masks_by_prompt: dict[str, list[dict]],
+    image_shape,
+    ambiguity_masks_by_prompt: dict[str, list[dict]] | None = None,
+) -> list[dict]:
     """Verify every constraint. masks_by_prompt maps object_prompt -> masks returned by SAM."""
     results = []
     for constraint in constraints:
         masks = masks_by_prompt.get(constraint.object_prompt, [])
-        results.append(check_constraint(constraint, masks, image_shape))
+        ambiguity_masks = (
+            ambiguity_masks_by_prompt.get(constraint.object_prompt, [])
+            if ambiguity_masks_by_prompt is not None
+            else None
+        )
+        results.append(
+            check_constraint(constraint, masks, image_shape, ambiguity_masks)
+        )
     return results
