@@ -19,8 +19,8 @@ verifier's decisions with blinded human counts.
 ## Architecture
 
 ```mermaid
-flowchart TD
-    User([User Brief]) --> Spark[Muse Spark]
+graph TD
+    User[User Brief] --> Spark[Muse Spark]
     Spark -->|Extracts Constraints| JSON[JSON Checklist]
 
     JSON --> Image[Muse Image]
@@ -32,19 +32,11 @@ flowchart TD
     Masks --> Verifier[Deterministic Python Verifier]
     JSON --> Verifier
 
-    Verifier -->|PASS| Output([Verified Dataset Image])
-    Verifier -->|UNCERTAIN| Human([Human Review])
+    Verifier -->|PASS| Output[Verified Dataset Image]
+    Verifier -->|UNCERTAIN| Human[Human Review]
 
     Verifier -->|FAIL| Fix[Generate Numeric Fix Instruction]
     Fix -->|Edit Image| Image
-
-    classDef meta fill:#0668E1,stroke:#fff,stroke-width:2px,color:#fff;
-    classDef python fill:#3776AB,stroke:#fff,stroke-width:2px,color:#fff;
-    classDef action fill:#f9f9f9,stroke:#333,stroke-width:2px;
-
-    class Spark,Image,SAM meta;
-    class Verifier,Fix python;
-    class JSON,Img,Masks action;
 ```
 
 The pipeline has four main steps:
